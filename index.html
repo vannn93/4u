@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Galaxy of Love</title>
+<style>
+  body,html{margin:0;height:100%;background:#000;overflow:hidden}
+  canvas{display:block}
+
+  /* Pemutar musik */
+  .player{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    width:90%;max-width:600px;display:flex;align-items:center;gap:10px;
+    padding:10px;border:2px solid #ff66cc;border-radius:999px;background:rgba(255,105,180,0.1);
+    box-shadow:0 0 15px #ff99cc,0 0 30px #ff66cc;z-index:1000;
+    font-family:Arial,sans-serif;color:#fff;font-size:14px
+  }
+  .player button{
+    background:transparent;border:none;color:#fff;font-size:22px;cursor:pointer;
+    filter:drop-shadow(0 0 6px #ff66cc);transition:transform .2s
+  }
+  .player button:hover{transform:scale(1.2);filter:drop-shadow(0 0 10px #ff3399)}
+  .progress{flex-grow:1;height:14px;background:rgba(255,255,255,.15);
+    border-radius:999px;overflow:hidden;cursor:pointer;position:relative}
+  .progress-bar{height:100%;width:0%;
+    background:linear-gradient(270deg,#ff66cc,#ff3399,#ff99cc,#ff66cc);
+    background-size:400% 400%;border-radius:999px;box-shadow:0 0 10px #ff66cc;
+    animation:flowing 6s ease infinite}
+  @keyframes flowing{
+    0%{background-position:0 50%}50%{background-position:100% 50%}100%{background-position:0 50%}
+  }
+  .time{min-width:74px;text-align:right;font-size:12px;color:#fff;text-shadow:0 0 5px #ff66cc}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<!-- Kontrol audio -->
+<div class="player">
+  <button id="play">▶️</button>
+  <div class="progress" id="progress"><div class="progress-bar" id="progress-bar"></div></div>
+  <div class="time" id="time">0:00 / 0:00</div>
+</div>
+
+<audio id="audio" loop>
+  <source src="https://www.dropbox.com/scl/fi/qfv28rqu6b36jwusao4x4/Love.MP3?rlkey=ptjd053374f028aa4jfcfrfxn&st=1j0j51eo&raw=1" type="audio/mpeg">
+</audio>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.min.js"></script>
+<script>
+/* ====== AUDIO PLAYER ====== */
+const audio=document.getElementById("audio"),
+playBtn=document.getElementById("play"),
+progress=document.getElementById("progress"),
+progressBar=document.getElementById("progress-bar"),
+timeDisplay=document.getElementById("time");
+let isPlaying=false;
+function formatTime(e){if(!isFinite(e))return"0:00";return Math.floor(e/60)+":"+Math.floor(e%60).toString().padStart(2,"0")}
+playBtn.addEventListener("click",async()=>{
+  if(isPlaying){audio.pause();playBtn.textContent="▶️"}
+  else{await audio.play();playBtn.textContent="⏸️"}
+  isPlaying=!isPlaying
+});
+audio.addEventListener("timeupdate",()=>{
+  const e=audio.currentTime/audio.duration*100;
+  progressBar.style.width=(isFinite(e)?e:0)+"%";
+  timeDisplay.textContent=formatTime(audio.currentTime)+" / "+formatTime(audio.duration)
+});
+progress.addEventListener("click",e=>{
+  const t=progress.getBoundingClientRect(),
+  n=(e.clientX-t.left)/t.width;
+  if(isFinite(audio.duration))audio.currentTime=n*audio.duration
+});
+
+/* ====== THREE.JS GALAXY ====== */
+const canvas=document.getElementById("c"),
+renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.setSize(innerWidth,innerHeight);
+
+const scene=new THREE.Scene,
+camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,5000);
+let targetDist=300,currentDist=300,rotX=.2,rotY=0;
+
+/* Planet dengan tekstur hati */
+const loader=new THREE.TextureLoader();
+const planetTex=loader.load("https://i.ibb.co/pbtYs96/heart-texture.jpg");
+const planetMat=new THREE.MeshPhongMaterial({
+  map: planetTex,
+  emissive: 0xff66cc,
+  emissiveIntensity: 0.9,
+  shininess: 150
+});
+const planet=new THREE.Mesh(new THREE.SphereGeometry(40,64,64),planetMat);
+scene.add(planet);
+
+/* Glow planet */
+function makeGlow(size=1024,color="255,100,180"){
+  const c=document.createElement("canvas");
+  c.width=c.height=size;
+  const ctx=c.getContext("2d");
+  const g=ctx.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+  g.addColorStop(0,`rgba(${color},0.7)`);
+  g.addColorStop(0.5,`rgba(${color},0.3)`);
+  g.addColorStop(1,"rgba(0,0,0,0)");
+  ctx.fillStyle=g;
+  ctx.fillRect(0,0,size,size);
+  return new THREE.CanvasTexture(c);
+}
+const glow=new THREE.Sprite(new THREE.SpriteMaterial({
+  map: makeGlow(),
+  transparent:true,
+  depthWrite:false
+}));
+glow.scale.set(350,350,1);
+scene.add(glow);
+
+/* Ring utama */
+const ringGeo=new THREE.RingGeometry(60,80,128);
+const ringMat=new THREE.MeshPhongMaterial({
+  color:0xff99cc,
+  transparent:true,
+  opacity:0.9,
+  side:THREE.DoubleSide
+});
+const ring=new THREE.Mesh(ringGeo,ringMat);
+ring.rotation.x=Math.PI/2;
+scene.add(ring);
+
+/* Ring glow tambahan */
+const ringGlow=new THREE.Mesh(
+  new THREE.RingGeometry(82,95,128),
+  new THREE.MeshBasicMaterial({
+    color:0xff66aa,
+    transparent:true,
+    opacity:0.75,
+    side:THREE.DoubleSide
+  })
+);
+ringGlow.rotation.x=Math.PI/2;
+scene.add(ringGlow);
+
+/* Ambient light */
+scene.add(new THREE.AmbientLight(0x888888));
+
+/* Bintang */
+(function makeStars(count=2000,spread=3000){
+  const geo=new THREE.BufferGeometry();
+  const pos=new Float32Array(3*count);
+  for(let i=0;i<count;i++){
+    const r=spread*(0.3+0.7*Math.random());
+    const phi=Math.acos(2*Math.random()-1);
+    const theta=Math.random()*Math.PI*2;
+    pos[3*i]=r*Math.sin(phi)*Math.cos(theta);
+    pos[3*i+1]=r*Math.cos(phi);
+    pos[3*i+2]=r*Math.sin(phi)*Math.sin(theta);
+  }
+  geo.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  scene.add(new THREE.Points(geo,new THREE.PointsMaterial({size:1.5,color:0xffffff,depthWrite:false})));
+})();
+
+/* Kata-kata cinta */
+const WORDS=[];
+const baseWords=[
+  "💌My Love","🔥Forever Yours","✨You are my star","🌞Always with you",
+  "🌎My Heart","Endless Love","You and Me","My Happiness","Sweetheart","Only You",
+  "Dream of You","🎉Love Forever","Stay with Me","Together Always","You are mine",
+  "My Angel","True Love","Be Mine","My Darling"
+];
+for(let e=0;e<15;e++)WORDS.push(...baseWords);
+
+function makeTextTexture(e,t){
+  const n=document.createElement("canvas");
+  n.width=512;n.height=128;
+  const a=n.getContext("2d");
+  a.clearRect(0,0,n.width,n.height);
+  a.font="bold 60px Arial";
+  a.textAlign="center";a.textBaseline="middle";
+  a.fillStyle="#fff";a.shadowColor=t;a.shadowBlur=30;
+  a.fillText(e,n.width/2,n.height/2);
+  return new THREE.CanvasTexture(n)
+}
+const COLORS=["#ff66ff","#66ccff","#ffd36b","#ff9966","#8df59a","#ffa0f8","#c6a7ff","#ff4444","#44ff99","#99ccff"],
+textGroup=new THREE.Group;
+scene.add(textGroup);
+for(let e=0;e<WORDS.length;e++){
+  const t=makeTextTexture(WORDS[e],COLORS[e%COLORS.length]),
+  n=new THREE.SpriteMaterial({map:t,transparent:true}),
+  a=new THREE.Sprite(n);
+  a.scale.set(50,16,1);
+  const r=Math.acos(2*Math.random()-1),i=Math.random()*Math.PI*2,o=150+120*Math.random();
+  a.position.set(o*Math.sin(r)*Math.cos(i),o*Math.cos(r),o*Math.sin(r)*Math.sin(i));
+  a.userData={phi:r,theta:i,radius:o,speed:.001+.001*Math.random()};
+  textGroup.add(a)
+}
+
+/* Kontrol drag untuk rotasi */
+let dragging=false,lastX=0,lastY=0;
+function onDown(e){dragging=true;const t=e.touches?e.touches[0]:e;lastX=t.clientX,lastY=t.clientY}
+function onMove(e){if(!dragging)return;const t=e.touches?e.touches[0]:e,n=(t.clientX-lastX)/innerWidth,a=(t.clientY-lastY)/innerHeight;rotY-=3*n,rotX=Math.max(-1.2,Math.min(1.2,rotX-2.2*a)),lastX=t.clientX,lastY=t.clientY}
+function onUp(){dragging=false}
+addEventListener("mousedown",onDown),addEventListener("mousemove",onMove),addEventListener("mouseup",onUp);
+addEventListener("touchstart",onDown,{passive:true}),addEventListener("touchmove",onMove,{passive:true}),addEventListener("touchend",onUp,{passive:true});
+
+/* Zoom scroll */
+addEventListener("wheel",e=>{
+  targetDist+=0.25*e.deltaY;
+  targetDist=Math.max(160,Math.min(600,targetDist));
+},{passive:true});
+
+/* Zoom pinch (mobile) */
+let pinch=0;
+addEventListener("touchmove",e=>{
+  if(e.touches && e.touches.length===2){
+    e.preventDefault();
+    const dx=e.touches[0].clientX-e.touches[1].clientX;
+    const dy=e.touches[0].clientY-e.touches[1].clientY;
+    const dist=Math.hypot(dx,dy);
+    if(pinch){
+      targetDist+=0.5*(pinch-dist);
+      targetDist=Math.max(160,Math.min(600,targetDist));
+    }
+    pinch=dist;
+  }
+},{passive:false});
+addEventListener("touchend",()=>{pinch=0},{passive:true});
+
+/* Loop animasi */
+let t=0;
+function tick(){
+  requestAnimationFrame(tick);
+  t+=.01;
+  ring.rotation.z+=.001;
+  ringGlow.rotation.z-=.0008;
+  textGroup.children.forEach((e=>{
+    e.material.opacity=.8+.2*Math.sin(2*t);
+    e.userData.theta+=e.userData.speed;
+    e.position.x=e.userData.radius*Math.sin(e.userData.phi)*Math.cos(e.userData.theta);
+    e.position.z=e.userData.radius*Math.sin(e.userData.phi)*Math.sin(e.userData.theta)
+  }));
+  currentDist+=0.06*(targetDist-currentDist);
+  const n=Math.cos(rotX),a=Math.sin(rotX),r=Math.cos(rotY),i=Math.sin(rotY);
+  camera.position.set(currentDist*i*n,currentDist*a,currentDist*r*n);
+  camera.lookAt(0,0,0);
+  renderer.render(scene,camera)
+}
+tick();
+</script>
+</body>
+</html>
